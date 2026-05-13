@@ -19,7 +19,7 @@ if (officialBuild) {
 }
 
 android {
-    namespace = "com.tsng.hidemyapplist"
+    namespace = "bin.xz.hma"
 
     buildFeatures {
         buildConfig = true
