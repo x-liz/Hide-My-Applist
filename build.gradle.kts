@@ -35,9 +35,16 @@ val minBackupVerCode by extra(65)
 val androidSourceCompatibility = JavaVersion.VERSION_21
 val androidTargetCompatibility = JavaVersion.VERSION_21
 
+// ✅ FIX 1: local.properties 安全加载（CI 不会崩）
 val localProperties = Properties()
-localProperties.load(file("local.properties").inputStream())
-val officialBuild by extra(localProperties.getProperty("officialBuild", "false") == "true")
+val localPropertiesFile = file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
+val officialBuild by extra(
+    localProperties.getProperty("officialBuild", "false") == "true"
+)
 
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
@@ -53,28 +60,31 @@ fun Project.configureBaseExtension() {
             targetSdk = targetSdkVer
             versionCode = gitCommitCount
             versionName = appVerName
-            if (localProperties.getProperty("buildWithGitSuffix").toBoolean())
+
+            if (localProperties.getProperty("buildWithGitSuffix")?.toBoolean() == true) {
                 versionNameSuffix = ".r${gitCommitCount}.${gitCommitHash}"
+            }
 
             consumerProguardFiles("proguard-rules.pro")
         }
 
-        val config = localProperties.getProperty("fileDir")?.let {
-            signingConfigs.create("config") {
-                storeFile = file(it)
-                storePassword = localProperties.getProperty("storePassword")
-                keyAlias = localProperties.getProperty("keyAlias")
-                keyPassword = localProperties.getProperty("keyPassword")
-            }
-        }
+        // ❌ FIX 2: 完全移除 keystore / signingConfigs 创建逻辑
 
         buildTypes {
-            all {
-                signingConfig = config ?: signingConfigs["debug"]
+
+            // ✅ debug 只用默认 debug key
+            getByName("debug") {
+                isMinifyEnabled = false
             }
-            named("release") {
+
+            // ✅ release：不再签名（避免 generateReleaseSignInfo）
+            getByName("release") {
                 isMinifyEnabled = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                signingConfig = signingConfigs.findByName("debug")
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+                )
             }
         }
 
